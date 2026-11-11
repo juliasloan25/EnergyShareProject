@@ -10,15 +10,48 @@ def dispatch(demand, nuclear, hydro, wind, solar,
              C_storage, eta=0.85, dispatch_h=4, soc0=0.5) -> pd.DataFrame:
     """Simulate hourly electricity dispatch."""
 
+    # Validate input parameters
+    if C_storage < 0:
+        raise ValueError("Storage capacity cannot be negative.")
+
+    if not 0 < eta <= 1:
+        raise ValueError("Battery efficiency must be between 0 and 1.")
+
+    if dispatch_h <= 0:
+        raise ValueError("Dispatch duration must be positive.")
+
+    if not 0 <= soc0 <= 1:
+        raise ValueError("Initial SOC must be between 0 and 1.")
+    
     # Convert inputs to numpy arrays
     demand = np.asarray(demand, dtype=float)
     hydro = np.asarray(hydro, dtype=float)
     wind = np.asarray(wind, dtype=float)
     solar = np.asarray(solar, dtype=float)
+    
+    # Check input profile lengths
+    n = len(demand)
+
+    if not all(len(profile) == n for profile in [hydro, wind, solar]):
+        raise ValueError("All hourly profiles must have the same length.")
 
     # Nuclear generation is constant throughout the year
     nuclear = np.full(len(demand), nuclear, dtype=float)
+       
+        # Check input values
+    for name, profile in {
+        "demand": demand,
+        "nuclear": nuclear,
+        "hydro": hydro,
+        "wind": wind,
+        "solar": solar
+    }.items():
+        if not np.all(np.isfinite(profile)):
+            raise ValueError(f"{name} contains invalid values.")
 
+        if np.any(profile < 0):
+            raise ValueError(f"{name} cannot contain negative values.")
+    
     # Calculate total generation
     total_generation = nuclear + hydro + wind + solar
 
@@ -176,7 +209,7 @@ def validate_dispatch(df, demand) -> dict:
         ):
             soc_evolution_ok = False
             break
-     # 8. Check battery SOC e    
+        
     results = {
         "energy_balance": balance_ok,
         "soc_limits": soc_ok,
@@ -219,4 +252,3 @@ if __name__ == "__main__":
     print("\nDispatch Validation Results:")
     for check, result in validation.items():
         print(f"{check}: {result}")
-
