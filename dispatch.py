@@ -75,8 +75,8 @@ def dispatch(demand, nuclear, hydro, wind, solar,
         # Store battery state of charge
         soc[t] = E_battery / C_storage if C_storage > 0 else 0
 
-   
-     df = pd.DataFrame({
+               
+    df = pd.DataFrame({
         "demand": demand,
         "nuclear": nuclear,
         "hydro": hydro,
