@@ -12,9 +12,7 @@ def wind_profile(v50, multiplier, power_curve) -> np.ndarray:
     """Return hourly wind output per kW installed."""
 
 def hydro_profile(river_flow_norm, area) -> np.ndarray:
-    """Return hourly hydro generation in kW, accounting for area
-    and the maximum hydro output of 10 kW/km²."""
+    """Return hourly hydro generation in kW, based on the area."""
 
 def demand_profile(per_capita_kw, population) -> np.ndarray:
     """Return total hourly electricity demand in kW."""
-
