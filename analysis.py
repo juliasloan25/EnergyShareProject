@@ -91,8 +91,61 @@ def spared_pct(df) -> float:
 def plot_week(df, demand, start_hour):
     """Plot generation, demand, and storage over one week."""
 
+
+import matplotlib.pyplot as plt
+
 def plot_pie(df):
-    """Plot the annual generation mix."""
+    """Plot the annual contribution of each technology and storage."""
+
+    # Define the columns and labels for the pie chart
+    columns = [
+        "nuclear",
+        "hydro",
+        "wind",
+        "solar",
+        "gas",
+        "battery_discharge"
+    ]
+
+    labels = [
+        "Nuclear",
+        "Hydro",
+        "Wind",
+        "Solar",
+        "Gas",
+        "Storage"
+    ]
+
+    # Check that all required columns exist
+    for column in columns:
+        if column not in df.columns:
+            raise ValueError(f"Missing column: {column}")
+
+    # Calculate annual energy supplied by each source
+    annual_energy = df[columns].sum()
+
+    # Calculate total electricity supplied
+    total_energy = annual_energy.sum()
+
+    if total_energy == 0:
+        raise ValueError("Total energy supplied cannot be zero.")
+
+    # Create pie chart
+    plt.figure(figsize=(9, 7))
+
+    plt.pie(
+        annual_energy,
+        labels=labels,
+        autopct="%1.1f%%",
+        startangle=90
+    )
+
+    plt.title("Annual Electricity Supply Mix")
+    plt.axis("equal")
+    plt.tight_layout()
+
+    plt.show()
+
 
 def sensitivity_analysis(profiles, demand, pop, costs, scenarios) -> pd.DataFrame:
     """Evaluate how changes in assumptions affect gas use
