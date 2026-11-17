@@ -18,7 +18,7 @@ from resources import (
 )
 from optimization import optimize_mix, plot_optimization_convergence
 from dispatch import validate_dispatch
-from analysis import co2_per_kwh, cc_stats, spared_pct, plot_pie
+from analysis import co2_per_kwh, cc_stats, spared_pct, plot_pie, plot_co2_pie
 
 
 # Input data files (as saved in the project folder, see Annex II / V)
@@ -106,6 +106,9 @@ if __name__ == "__main__":
     plt.close("all")  # drop the convergence figure so plot_pie's show() is clean
     print("  convergence plot -> convergence.png")
 
-    # Annual generation mix pie (interactive; close the window to continue)
-    print("  showing generation mix pie chart (close window to exit)")
-    plot_pie(df)
+    # Annual generation mix pie and CO2 emissions pie (both saved to disk
+    # and shown interactively; close each window to continue)
+    print("  generation mix pie   -> generation_mix.png")
+    print("  CO2 emissions pie    -> co2_emissions.png")
+    plot_pie(df, save_path="generation_mix.png")
+    plot_co2_pie(df, EMISSION_FACTORS, save_path="co2_emissions.png")
