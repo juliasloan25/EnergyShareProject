@@ -143,17 +143,27 @@ def plot_pie(df, save_path=None):
     if total_energy == 0:
         raise ValueError("Total energy supplied cannot be zero.")
 
+    # Build legend labels with percentages inline; keep the pie itself clean.
+    percentages = 100 * annual_energy / total_energy
+    legend_labels = [
+        f"{label} ({pct:.1f}%)" for label, pct in zip(labels, percentages)
+    ]
+
     # Create pie chart
     plt.figure(figsize=(9, 7))
-
-    plt.pie(
+    wedges, _ = plt.pie(
         annual_energy,
-        labels=labels,
-        autopct="%1.1f%%",
-        startangle=90
+        startangle=90,
+        radius=0.85,
     )
 
-    plt.title("Annual Electricity Supply Mix")
+    # Legend to the right of the pie, outside the plot area.
+    plt.legend(
+        wedges, legend_labels,
+        loc="center left", bbox_to_anchor=(1.0, 0.5), frameon=False,
+    )
+
+    plt.title("Annual Electricity Supply Mix", pad=20)
     plt.axis("equal")
     plt.tight_layout()
 
@@ -182,21 +192,33 @@ def plot_co2_pie(df, emission_factors, save_path=None):
 
     labels = [technology.capitalize() for technology in emissions.keys()]
 
+    # Build legend labels with percentages inline; keep the pie itself clean.
+    values = list(emissions.values())
+    legend_labels = [
+        f"{label} ({100 * v / total_emissions:.1f}%)"
+        for label, v in zip(labels, values)
+    ]
+
     # Create pie chart
     plt.figure(figsize=(9, 7))
-
-    plt.pie(
-        list(emissions.values()),
-        labels=labels,
-        autopct="%1.1f%%",
+    wedges, _ = plt.pie(
+        values,
         startangle=90,
+        radius=0.85,
+    )
+
+    # Legend to the right of the pie, outside the plot area.
+    plt.legend(
+        wedges, legend_labels,
+        loc="center left", bbox_to_anchor=(1.0, 0.5), frameon=False,
     )
 
     # 1 Mt CO2 = 1e12 gCO2. Report in Mt because annual emissions at this
     # scale are typically 0.5-few Mt.
     plt.title(
         "Annual CO2 Emissions by Technology\n"
-        f"Total: {total_emissions / 1e12:.2f} Mt CO2/year"
+        f"Total: {total_emissions / 1e12:.2f} Mt CO2/year",
+        pad=20,
     )
     plt.axis("equal")
     plt.tight_layout()
