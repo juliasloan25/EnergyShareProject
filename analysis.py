@@ -192,7 +192,12 @@ def plot_co2_pie(df, emission_factors, save_path=None):
         startangle=90,
     )
 
-    plt.title("Annual CO2 Emissions by Technology")
+    # 1 Mt CO2 = 1e12 gCO2. Report in Mt because annual emissions at this
+    # scale are typically 0.5-few Mt.
+    plt.title(
+        "Annual CO2 Emissions by Technology\n"
+        f"Total: {total_emissions / 1e12:.2f} Mt CO2/year"
+    )
     plt.axis("equal")
     plt.tight_layout()
 
