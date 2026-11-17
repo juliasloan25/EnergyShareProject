@@ -151,3 +151,61 @@ def sensitivity_analysis(profiles, demand, pop, costs, scenarios) -> pd.DataFram
     """Evaluate how changes in assumptions affect gas use
     and other key results."""
 
+
+if __name__ == "__main__":
+    # Integration smoke test: run each analysis function on a real,
+    # full-year scenario. Uses a fixed (non-optimized) budget split so
+    # the test is fast — the optimizer is tested in optimization.py.
+    import matplotlib
+    matplotlib.use("Agg", force=True)  # make plt.show() a no-op for the test
+
+    from resources import load_resource_data, build_profiles, demand_profile
+    from optimization import capacities_from_investment, simulate_year
+    from constants import CITY, COSTS, EMISSION_FACTORS
+
+    print("=" * 60)
+    print("analysis.py smoke test")
+    print("=" * 60)
+
+    # [1] Build a real scenario.
+    print("\n[1] Setting up scenario")
+    data = load_resource_data(
+        "POWER_Point_Hourly_20250101_20251231_038d03S_057d55W_UTC.csv",
+        "river_flow_norm.csv",
+        "demand_data2026.dat",
+    )
+    profiles = build_profiles(data)
+    demand = demand_profile(data["demand_per_capita"], CITY["pop"])
+
+    fractions = {"nuclear": 0.4, "wind": 0.3, "solar": 0.2, "storage": 0.1}
+    caps = capacities_from_investment(fractions, COSTS)
+    df = simulate_year(caps, profiles, demand)
+
+    print(f"  fractions: {fractions}")
+    print(f"  gas: {df['gas'].sum() / 1e9:.2f} TWh/year")
+
+    # [2] co2_per_kwh
+    print("\n[2] co2_per_kwh")
+    co2 = co2_per_kwh(df, EMISSION_FACTORS)
+    print(f"  CO2 intensity: {co2:.1f} gCO2/kWh")
+
+    # [3] cc_stats
+    print("\n[3] cc_stats")
+    stats = cc_stats(df)
+    print(f"  installed gas capacity: {stats['installed_gas_capacity_MW']:.1f} MW")
+    print(f"  gas load factor:        {stats['gas_load_factor'] * 100:.1f} %")
+
+    # [4] spared_pct
+    print("\n[4] spared_pct")
+    spared = spared_pct(df)
+    print(f"  spared (curtailed): {spared:.1f} % of total production")
+
+    # [5] plot_pie: just check it runs end-to-end without raising.
+    #     With the Agg backend, plt.show() warns but is a no-op; suppress it.
+    print("\n[5] plot_pie")
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        plot_pie(df)
+    plt.close("all")
+    print("  ran without error")

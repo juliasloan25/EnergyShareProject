@@ -22,13 +22,13 @@ def dispatch(demand, nuclear, hydro, wind, solar,
 
     if not 0 <= soc0 <= 1:
         raise ValueError("Initial SOC must be between 0 and 1.")
-    
+
     # Convert inputs to numpy arrays
     demand = np.asarray(demand, dtype=float)
     hydro = np.asarray(hydro, dtype=float)
     wind = np.asarray(wind, dtype=float)
     solar = np.asarray(solar, dtype=float)
-    
+
     # Check input profile lengths
     n = len(demand)
 
@@ -37,7 +37,7 @@ def dispatch(demand, nuclear, hydro, wind, solar,
 
     # Nuclear generation is constant throughout the year
     nuclear = np.full(len(demand), nuclear, dtype=float)
-       
+
         # Check input values
     for name, profile in {
         "demand": demand,
@@ -51,13 +51,13 @@ def dispatch(demand, nuclear, hydro, wind, solar,
 
         if np.any(profile < 0):
             raise ValueError(f"{name} cannot contain negative values.")
-    
+
     # Calculate total generation
     total_generation = nuclear + hydro + wind + solar
 
     # Calculate difference between generation and demand
     net_power = total_generation - demand
-    
+
     # Battery parameters
     dt = 1.0  # Each time step is 1 hour
     P_storage_max = C_storage / dispatch_h
@@ -108,7 +108,7 @@ def dispatch(demand, nuclear, hydro, wind, solar,
         # Store battery state of charge
         soc[t] = E_battery / C_storage if C_storage > 0 else 0
 
-   
+
     df = pd.DataFrame({
         "demand": demand,
         "nuclear": nuclear,
@@ -209,7 +209,7 @@ def validate_dispatch(df, demand) -> dict:
         ):
             soc_evolution_ok = False
             break
-        
+
     results = {
         "energy_balance": balance_ok,
         "soc_limits": soc_ok,
@@ -226,18 +226,27 @@ def validate_dispatch(df, demand) -> dict:
 
 if __name__ == "__main__":
 
-    demand = np.array([100, 100, 100, 100, 100])
-    nuclear = 40
-    hydro = np.array([10, 10, 10, 10, 10])
-    wind = np.array([20, 30, 10, 40, 20])
-    solar = np.array([50, 30, 0, 20, 0])
+    print("=" * 60)
+    print("dispatch.py smoke test")
+    print("=" * 60)
 
+    # --------------------------------------------------------------
+    # [A] Unit test: small, hand-verifiable synthetic input.
+    #     Keeps dispatch.py runnable even if resources.py is broken.
+    # --------------------------------------------------------------
+    print("\n[A] Unit test: 5 hours of synthetic data")
+
+    demand = np.array([100, 100, 100, 100, 100])
     df = dispatch(
-        demand, nuclear, hydro, wind, solar,
+        demand,
+        nuclear=40,
+        hydro=np.array([10, 10, 10, 10, 10]),
+        wind=np.array([20, 30, 10, 40, 20]),
+        solar=np.array([50, 30, 0, 20, 0]),
         C_storage=100,
         eta=0.85,
         dispatch_h=4,
-        soc0=0.5
+        soc0=0.5,
     )
 
     print(df[[
@@ -245,10 +254,48 @@ if __name__ == "__main__":
         "battery_charge",
         "battery_discharge",
         "gas",
-        "soc"
+        "soc",
     ]])
-    validation = validate_dispatch(df, demand)
 
-    print("\nDispatch Validation Results:")
+    validation = validate_dispatch(df, demand)
+    print("\n  Validation:")
     for check, result in validation.items():
-        print(f"{check}: {result}")
+        print(f"    {check}: {result}")
+
+    # --------------------------------------------------------------
+    # [B] Integration test: full year of real Mar del Plata data,
+    #     piped through resources.py -> dispatch.py.
+    # --------------------------------------------------------------
+    print("\n[B] Integration test: full year of real data")
+
+    from resources import load_resource_data, build_profiles, demand_profile
+    from constants import CITY
+
+    data = load_resource_data(
+        "POWER_Point_Hourly_20250101_20251231_038d03S_057d55W_UTC.csv",
+        "river_flow_norm.csv",
+        "demand_data2026.dat",
+    )
+    profiles = build_profiles(data)
+    demand_full = demand_profile(data["demand_per_capita"], CITY["pop"])
+
+    # Hand-picked capacities (roughly 40/30/20/10 budget split).
+    # Values in kW (nuclear/wind/solar) and kWh (storage).
+    df_full = dispatch(
+        demand_full,
+        nuclear=340_000,
+        hydro=profiles["hydro"],
+        wind=1_090_000 * profiles["wind"],
+        solar=1_270_000 * profiles["solar"],
+        C_storage=1_330_000,
+    )
+
+    print(f"  hours simulated: {len(df_full)}")
+    print(f"  peak demand:     {demand_full.max() / 1e6:.2f} GW")
+    print(f"  gas:             {df_full['gas'].sum() / 1e9:.2f} TWh/year")
+    print(f"  curtailment:     {df_full['curtailment'].sum() / 1e9:.2f} TWh/year")
+
+    val_full = validate_dispatch(df_full, demand_full)
+    print("\n  Validation:")
+    for check, ok in val_full.items():
+        print(f"    {check}: {ok}")

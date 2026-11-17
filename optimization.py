@@ -154,63 +154,56 @@ def plot_optimization_convergence(result, path="convergence.png"):
 
 
 if __name__ == "__main__":
-    # Unit test with small synthetic profiles.
-    # Keep n_calls small so the test finishes quickly.
+    # Integration smoke test: full pipeline on real Mar del Plata data.
+    # Runs the actual optimizer (~1 minute).
+    import time
     from dispatch import validate_dispatch
+    from resources import load_resource_data, build_profiles, demand_profile
+    from constants import COSTS
 
-    # 24 hours of flat demand and simple day/night solar + steady wind + hydro
-    hours = 24
-    demand_test = np.full(hours, 1000.0)  # kW
-    profiles_test = {
-        "solar": np.where(
-            (np.arange(hours) >= 6) & (np.arange(hours) < 18), 0.6, 0.0
-        ),  # per kW
-        "wind":  np.full(hours, 0.3),     # per kW
-        "hydro": np.full(hours, 100.0),   # kW
-    }
-    costs_test = {
-        "nuclear": 47000,  # EUR/kW
-        "wind":    11000,  # EUR/kW
-        "solar":    6300,  # EUR/kW
-        "storage":  3000,  # EUR/kWh
-    }
-    pop_test = 1000
+    print("=" * 60)
+    print("optimization.py smoke test")
+    print("=" * 60)
 
-    # 1. Capacities should spend exactly the budget.
+    # [1] Budget check: capacities should spend exactly the budget.
+    print("\n[1] Budget check")
     fractions = {"nuclear": 0.2, "wind": 0.3, "solar": 0.3, "storage": 0.2}
-    caps = capacities_from_investment(fractions, costs_test, pop=pop_test)
-    budget = pop_test * 20000
-    spent = (
-        caps["nuclear"] * costs_test["nuclear"]
-        + caps["wind"]    * costs_test["wind"]
-        + caps["solar"]   * costs_test["solar"]
-        + caps["storage"] * costs_test["storage"]
+    caps = capacities_from_investment(fractions, COSTS)
+    budget = CITY["pop"] * INV_PER_CAPITA
+    spent = sum(caps[t] * COSTS[t] for t in TECHS)
+    print(f"  budget: {budget / 1e9:.2f} B EUR,  spent: {spent / 1e9:.2f} B EUR,  "
+          f"match: {np.isclose(spent, budget)}")
+
+    # [2] Load the real inputs.
+    print("\n[2] Loading real Mar del Plata data...")
+    data = load_resource_data(
+        "POWER_Point_Hourly_20250101_20251231_038d03S_057d55W_UTC.csv",
+        "river_flow_norm.csv",
+        "demand_data2026.dat",
     )
-    print(f"Budget check: spent {spent:.2f} EUR vs budget {budget} EUR  "
-          f"(match: {np.isclose(spent, budget)})")
+    profiles = build_profiles(data)
+    demand = demand_profile(data["demand_per_capita"], CITY["pop"])
+    print(f"  loaded {len(demand)} hourly values")
+    print(f"  solar CF: {profiles['solar'].mean() * 100:.1f} %,  "
+          f"wind CF: {profiles['wind'].mean() * 100:.1f} %")
 
-    # 2. 100%-nuclear split should run and use very little / no gas when
-    #    the nuclear block alone covers demand.
-    all_nuclear = {"nuclear": 1.0, "wind": 0.0, "solar": 0.0, "storage": 0.0}
-    caps_nuc = capacities_from_investment(all_nuclear, costs_test, pop=pop_test)
-    df_nuc = simulate_year(caps_nuc, profiles_test, demand_test)
-    print(f"All-nuclear capacity: {caps_nuc['nuclear']:.1f} kW, "
-          f"gas: {gas_total(df_nuc):.1f} kWh")
+    # [3] Run the full optimization. Takes ~1 minute (110 dispatch calls
+    #     of 8760 hours each, plus skopt's GP overhead).
+    print("\n[3] Running optimizer (this takes about a minute)...")
+    t0 = time.time()
+    result = optimize_mix(profiles, demand, COSTS)
+    print(f"  done in {time.time() - t0:.1f} s")
 
-    # 3. optimize_mix runs end-to-end with a small call budget.
-    result = optimize_mix(
-        profiles_test, demand_test, costs_test,
-        pop=pop_test)
+    print("\n  Best investment mix:")
+    for tech in TECHS:
+        share = result["fractions"][tech]
+        cap = result["capacities"][tech]
+        unit = "MWh" if tech == "storage" else "MW"
+        print(f"    {tech:>8}: {share * 100:5.1f} %  ({cap / 1000:.0f} {unit})")
+    print(f"    gas:    {result['gas_kwh'] / 1e9:.2f} TWh/year")
 
-    print("\nOptimization result:")
-    for tech, share in result["fractions"].items():
-        print(f"  {tech:>8}: {share*100:5.1f}%  "
-              f"({result['capacities'][tech]:.1f} "
-              f"{'kWh' if tech == 'storage' else 'kW'})")
-    print(f"  gas: {result['gas_kwh']:.1f} kWh")
-
-    # Validate the best-result dispatch.
-    validation = validate_dispatch(result["df"], demand_test)
-    print("\nDispatch validation of best result:")
+    # [4] Validate the best-case dispatch.
+    print("\n[4] Validating best-case dispatch")
+    validation = validate_dispatch(result["df"], demand)
     for check, ok in validation.items():
         print(f"  {check}: {ok}")

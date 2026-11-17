@@ -159,6 +159,23 @@ def demand_profile(per_capita_kw, population) -> np.ndarray:
     return np.asarray(per_capita_kw, dtype=float) * population
 
 
+def build_profiles(data) -> dict:
+    """Compute the {solar, wind, hydro} profile dict from loaded NASA + river data.
+
+    This is the format expected by optimization.simulate_year / optimize_mix:
+    - "solar": AC output per kW installed  (unitless)
+    - "wind":  AC output per kW installed  (unitless)
+    - "hydro": actual output in kW (already scaled by area and river flow)
+    """
+    return {
+        "solar": solar_profile(
+            data["dni"], data["dhi"], {**SOLAR_PARAMS, "times": data["times"]},
+        ),
+        "wind":  wind_profile(data["v50"], WIND_MULTIPLIER, G132_POWER_CURVE),
+        "hydro": hydro_profile(data["river_flow_norm"], CITY["area_km2"]),
+    }
+
+
 if __name__ == "__main__":
     # Quick check of all profiles with the real data files
     data = load_resource_data(
@@ -167,18 +184,17 @@ if __name__ == "__main__":
         "demand_data2026.dat",
     )
 
-    solar = solar_profile(data["dni"], data["dhi"], {**SOLAR_PARAMS, "times": data["times"]})
-    wind = wind_profile(data["v50"], WIND_MULTIPLIER, G132_POWER_CURVE)
-    hydro = hydro_profile(data["river_flow_norm"], CITY["area_km2"])
+    profiles = build_profiles(data)
     demand = demand_profile(data["demand_per_capita"], CITY["pop"])
 
     print(f"Wind multiplier (50 m -> 140 m): {WIND_MULTIPLIER:.3f}")
-    print(f"Solar capacity factor: {solar.mean() * 100:.1f} %  (max {solar.max():.2f} kW/kW)")
-    print(f"Wind capacity factor:  {wind.mean() * 100:.1f} %")
-    print(f"Hydro: max {hydro.max() / 1000:.1f} MW, capacity factor "
-          f"{hydro.mean() / hydro.max() * 100:.1f} %")
+    print(f"Solar capacity factor: {profiles['solar'].mean() * 100:.1f} %  "
+          f"(max {profiles['solar'].max():.2f} kW/kW)")
+    print(f"Wind capacity factor:  {profiles['wind'].mean() * 100:.1f} %")
+    print(f"Hydro: max {profiles['hydro'].max() / 1000:.1f} MW, capacity factor "
+          f"{profiles['hydro'].mean() / profiles['hydro'].max() * 100:.1f} %")
     print(f"Demand: {demand.sum() / 1e9:.2f} TWh/year, peak {demand.max() / 1e6:.2f} GW")
 
-    for name, p in {"solar": solar, "wind": wind, "hydro": hydro, "demand": demand}.items():
+    for name, p in {**profiles, "demand": demand}.items():
         ok = len(p) == 8760 and np.all(np.isfinite(p)) and np.all(p >= 0)
         print(f"{name}: 8760 values, finite, non-negative -> {ok}")
