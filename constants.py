@@ -41,13 +41,11 @@ CITY = {
 }
 
 # Lifecycle CO2 emission factors in gCO2eq/kWh of electricity generated.
-# IPCC AR5 medians (also typical of electricitymaps.com display values).
-# Used by analysis.co2_per_kwh.
-# TODO update these from electricitymaps.com for Argentina
+# Values are from electricitymaps.com for Argentina.
 EMISSION_FACTORS = {
     "nuclear":  12,
     "hydro":    24,
     "wind":     11,
-    "solar":    48,
+    "solar":    45,
     "gas":     490,   # CCGT
 }
