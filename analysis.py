@@ -103,29 +103,15 @@ def spared_pct(df) -> float:
 
 def plot_week(df, demand, start_hour):
     """
-    Plot electricity generation and demand over one selected week.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Hourly dispatch results from dispatch().
-
-    demand : array-like
-        Hourly electricity demand in kW.
-
-    start_hour : int
-        First hour of the selected week.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Weekly electricity generation and demand plot.
+    Plot electricity generation, battery charge/discharge
+    and demand over one selected week (168 hours).
     """
 
     # 1. Validate inputs
 
     required_columns = [
-        "nuclear", "hydro", "wind", "solar", "gas"
+        "nuclear", "hydro", "wind", "solar", "gas",
+        "battery_charge", "battery_discharge"
     ]
 
     for col in required_columns:
@@ -141,19 +127,15 @@ def plot_week(df, demand, start_hour):
         raise TypeError("start_hour must be an integer.")
 
     if start_hour < 0 or start_hour + 168 > len(df):
-        raise ValueError(
-            "Invalid start_hour: not enough hours for one week."
-        )
+        raise ValueError("Not enough hours for one week.")
 
     if not np.all(np.isfinite(demand)) or np.any(demand < 0):
         raise ValueError("Demand contains invalid values.")
 
-    # 2. Select the 168 hours
+    # 2. Select the week
 
-    end_hour = start_hour + 168
-
-    week = df.iloc[start_hour:end_hour]
-    week_demand = demand[start_hour:end_hour]
+    week = df.iloc[start_hour:start_hour + 168]
+    week_demand = demand[start_hour:start_hour + 168]
 
     hours = np.arange(168)
 
@@ -165,9 +147,12 @@ def plot_week(df, demand, start_hour):
     solar = week["solar"].to_numpy() / 1000
     gas = week["gas"].to_numpy() / 1000
 
+    battery_discharge = week["battery_discharge"].to_numpy() / 1000
+    battery_charge = week["battery_charge"].to_numpy() / 1000
+
     demand_MW = week_demand / 1000
 
-    # 4. Plot generation and demand
+    # 4. Plot all energy sources
 
     fig, ax = plt.subplots(figsize=(14, 6))
 
@@ -178,9 +163,30 @@ def plot_week(df, demand, start_hour):
         wind,
         solar,
         gas,
-        labels=["Nuclear", "Hydro", "Wind", "Solar", "Gas"],
+        battery_discharge,
+        labels=[
+            "Nuclear",
+            "Hydro",
+            "Wind",
+            "Solar",
+            "Gas",
+            "Battery discharge"
+        ],
         alpha=0.8
     )
+
+    # 5. Plot battery charging
+
+    ax.fill_between(
+        hours,
+        0,
+        battery_charge,
+        color="grey",
+        alpha=0.5,
+        label="Battery charge"
+    )
+
+    # 6. Plot demand
 
     ax.plot(
         hours,
@@ -190,11 +196,11 @@ def plot_week(df, demand, start_hour):
         label="Demand"
     )
 
-    # 5. Configure plot
+    # 7. Configure plot
 
     ax.set_title(
-        f"Electricity Generation and Demand "
-        f"(Hours {start_hour}-{end_hour - 1})"
+        f"Electricity Generation and Battery Operation "
+        f"(Hours {start_hour}-{start_hour + 167})"
     )
 
     ax.set_xlabel("Day of the week")
