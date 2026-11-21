@@ -2,6 +2,10 @@
 # communicating the results of the optimization, such as
 # sensitivity analysis and plotting.
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
 def emissions_by_tech(df, emission_factors) -> dict:
     """Annual CO2 emissions per technology, in gCO2.
 
@@ -98,10 +102,113 @@ def spared_pct(df) -> float:
     return float(surplus_percentage)
 
 def plot_week(df, demand, start_hour):
-    """Plot generation, demand, and storage over one week."""
+    """
+    Plot electricity generation and demand over one selected week.
 
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Hourly dispatch results from dispatch().
 
-import matplotlib.pyplot as plt
+    demand : array-like
+        Hourly electricity demand in kW.
+
+    start_hour : int
+        First hour of the selected week.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Weekly electricity generation and demand plot.
+    """
+
+    # 1. Validate inputs
+
+    required_columns = [
+        "nuclear", "hydro", "wind", "solar", "gas"
+    ]
+
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"Missing column: {col}")
+
+    demand = np.asarray(demand, dtype=float)
+
+    if len(demand) != len(df):
+        raise ValueError("Demand and df must have the same length.")
+
+    if not isinstance(start_hour, (int, np.integer)):
+        raise TypeError("start_hour must be an integer.")
+
+    if start_hour < 0 or start_hour + 168 > len(df):
+        raise ValueError(
+            "Invalid start_hour: not enough hours for one week."
+        )
+
+    if not np.all(np.isfinite(demand)) or np.any(demand < 0):
+        raise ValueError("Demand contains invalid values.")
+
+    # 2. Select the 168 hours
+
+    end_hour = start_hour + 168
+
+    week = df.iloc[start_hour:end_hour]
+    week_demand = demand[start_hour:end_hour]
+
+    hours = np.arange(168)
+
+    # 3. Convert kW to MW
+
+    nuclear = week["nuclear"].to_numpy() / 1000
+    hydro = week["hydro"].to_numpy() / 1000
+    wind = week["wind"].to_numpy() / 1000
+    solar = week["solar"].to_numpy() / 1000
+    gas = week["gas"].to_numpy() / 1000
+
+    demand_MW = week_demand / 1000
+
+    # 4. Plot generation and demand
+
+    fig, ax = plt.subplots(figsize=(14, 6))
+
+    ax.stackplot(
+        hours,
+        nuclear,
+        hydro,
+        wind,
+        solar,
+        gas,
+        labels=["Nuclear", "Hydro", "Wind", "Solar", "Gas"],
+        alpha=0.8
+    )
+
+    ax.plot(
+        hours,
+        demand_MW,
+        color="black",
+        linewidth=2,
+        label="Demand"
+    )
+
+    # 5. Configure plot
+
+    ax.set_title(
+        f"Electricity Generation and Demand "
+        f"(Hours {start_hour}-{end_hour - 1})"
+    )
+
+    ax.set_xlabel("Day of the week")
+    ax.set_ylabel("Power (MW)")
+
+    ax.set_xticks(np.arange(0, 168, 24))
+    ax.set_xticklabels([f"Day {i+1}" for i in range(7)])
+
+    ax.legend(loc="upper left", ncol=3)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    return fig
 
 def plot_pie(df, save_path=None):
     """Plot the annual contribution of each technology and storage.
