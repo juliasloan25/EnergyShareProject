@@ -101,60 +101,76 @@ def spared_pct(df) -> float:
 
     return float(surplus_percentage)
 
-def plot_week(df, demand, start_hour):
-    """
-    Plot electricity generation, battery charge/discharge
-    and demand over one selected week (168 hours).
-    """
+def plot_week(df, demand, start_hour=0):
 
-    # 1. Validate inputs
+    # =====================================================
+    # 1. CHECK DATA
+    # =====================================================
 
     required_columns = [
-        "nuclear", "hydro", "wind", "solar", "gas",
-        "battery_charge", "battery_discharge"
+        "nuclear",
+        "hydro",
+        "wind",
+        "solar",
+        "gas",
+        "battery_charge",
+        "battery_discharge",
+        "soc"
     ]
 
-    for col in required_columns:
-        if col not in df.columns:
-            raise ValueError(f"Missing column: {col}")
+    for column in required_columns:
+        if column not in df.columns:
+            raise ValueError(f"Missing column: {column}")
 
-    demand = np.asarray(demand, dtype=float)
+    # Select 168 hours (one week)
+    end_hour = start_hour + 168
 
-    if len(demand) != len(df):
-        raise ValueError("Demand and df must have the same length.")
+    if end_hour > len(df):
+        raise ValueError("Not enough data for a complete 168-hour week.")
 
-    if not isinstance(start_hour, (int, np.integer)):
-        raise TypeError("start_hour must be an integer.")
+    week = df.iloc[start_hour:end_hour]
 
-    if start_hour < 0 or start_hour + 168 > len(df):
-        raise ValueError("Not enough hours for one week.")
+    # Demand can be passed as a separate array or Series
+    demand_week = np.asarray(demand)[start_hour:end_hour]
 
-    if not np.all(np.isfinite(demand)) or np.any(demand < 0):
-        raise ValueError("Demand contains invalid values.")
+    if len(demand_week) != 168:
+        raise ValueError("Demand must contain 168 values for the selected week.")
 
-    # 2. Select the week
+    # =====================================================
+    # 2. POWER DATA (kW)
+    # =====================================================
 
-    week = df.iloc[start_hour:start_hour + 168]
-    week_demand = demand[start_hour:start_hour + 168]
+    nuclear = week["nuclear"].to_numpy()
+    hydro = week["hydro"].to_numpy()
+    wind = week["wind"].to_numpy()
+    solar = week["solar"].to_numpy()
+    gas = week["gas"].to_numpy()
+
+    battery_discharge = week["battery_discharge"].to_numpy()
+    battery_charge = week["battery_charge"].to_numpy()
+
+    # Represent charging as negative power
+    battery_charge_negative = -battery_charge
+
+    # Storage energy (kWh)
+    C_storage = df.attrs.get("C_storage")
+
+    if C_storage is None:
+        raise ValueError("C_storage is missing from df.attrs.")
+
+    storage = week["soc"].to_numpy() * C_storage
+
+    # =====================================================
+    # 3. CREATE FIGURE
+    # =====================================================
+
+    fig, ax = plt.subplots(figsize=(15, 6))
 
     hours = np.arange(168)
 
-    # 3. Convert kW to MW
-
-    nuclear = week["nuclear"].to_numpy() / 1000
-    hydro = week["hydro"].to_numpy() / 1000
-    wind = week["wind"].to_numpy() / 1000
-    solar = week["solar"].to_numpy() / 1000
-    gas = week["gas"].to_numpy() / 1000
-
-    battery_discharge = week["battery_discharge"].to_numpy() / 1000
-    battery_charge = week["battery_charge"].to_numpy() / 1000
-
-    demand_MW = week_demand / 1000
-
-    # 4. Plot all energy sources
-
-    fig, ax = plt.subplots(figsize=(14, 6))
+    # =====================================================
+    # 4. GENERATION STACKPLOT
+    # =====================================================
 
     ax.stackplot(
         hours,
@@ -175,46 +191,78 @@ def plot_week(df, demand, start_hour):
         alpha=0.8
     )
 
-    # 5. Plot battery charging
-
+    # Battery charging below zero
     ax.fill_between(
         hours,
         0,
-        battery_charge,
-        color="grey",
-        alpha=0.5,
-        label="Battery charge"
+        battery_charge_negative,
+        label="Battery charge",
+        alpha=0.6
     )
 
-    # 6. Plot demand
+    # =====================================================
+    # 5. DEMAND LINE (RED)
+    # =====================================================
 
     ax.plot(
         hours,
-        demand_MW,
+        demand_week,
+        color="red",
+        linewidth=2,
+        label="Demand",
+        zorder=5
+    )
+
+    # =====================================================
+    # 6. STORAGE LINE (BLACK) - RIGHT AXIS
+    # =====================================================
+
+    ax2 = ax.twinx()
+
+    ax2.plot(
+        hours,
+        storage,
         color="black",
         linewidth=2,
-        label="Demand"
+        linestyle="-",
+        label="Storage",
+        zorder=6
     )
 
-    # 7. Configure plot
+    # =====================================================
+    # 7. LABELS AND TITLE
+    # =====================================================
 
-    ax.set_title(
-        f"Electricity Generation and Battery Operation "
-        f"(Hours {start_hour}-{start_hour + 167})"
+    ax.set_title("Electricity Dispatch - One Week")
+
+    ax.set_xlabel("Hour")
+    ax.set_ylabel("Power (kW)")
+    ax2.set_ylabel("Stored energy (kWh)")
+
+    ax.set_xlim(0, 167)
+    ax.set_xticks(np.arange(0, 168, 12))
+
+    ax.grid(axis="y", alpha=0.3)
+
+    # =====================================================
+    # 8. COMBINED LEGEND
+    # =====================================================
+
+    handles1, labels1 = ax.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+
+    ax.legend(
+        handles1 + handles2,
+        labels1 + labels2,
+        loc="upper left",
+        ncol=2,
+        fontsize=9
     )
 
-    ax.set_xlabel("Day of the week")
-    ax.set_ylabel("Power (MW)")
-
-    ax.set_xticks(np.arange(0, 168, 24))
-    ax.set_xticklabels([f"Day {i+1}" for i in range(7)])
-
-    ax.legend(loc="upper left", ncol=3)
-    ax.grid(True, alpha=0.3)
-
-    plt.tight_layout()
+    fig.tight_layout()
 
     return fig
+
 
 def plot_pie(df, save_path=None):
     """Plot the annual contribution of each technology and storage.
