@@ -18,7 +18,9 @@ from resources import (
 )
 from optimization import optimize_mix, plot_optimization_convergence
 from dispatch import validate_dispatch
-from analysis import co2_per_kwh, cc_stats, spared_pct, plot_pie, plot_co2_pie
+from analysis import (
+    co2_per_kwh, cc_stats, spared_pct, plot_pie, plot_co2_pie, plot_week,
+)
 
 
 # Input data files (as saved in the project folder, see Annex II / V)
@@ -110,5 +112,11 @@ if __name__ == "__main__":
     # and shown interactively; close each window to continue)
     print("  generation mix pie   -> generation_mix.png")
     print("  CO2 emissions pie    -> co2_emissions.png")
+    print("  dispatch week        -> dispatch_week.png")
     plot_pie(df, save_path="generation_mix.png")
     plot_co2_pie(df, EMISSION_FACTORS, save_path="co2_emissions.png")
+
+    # One-week dispatch stackplot (starting hour 0 = first week of the year)
+    fig_week = plot_week(df, demand, start_hour=0)
+    fig_week.savefig("dispatch_week.png", bbox_inches="tight")
+    plt.show()
