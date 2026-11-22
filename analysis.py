@@ -254,9 +254,10 @@ def plot_week(df, demand, start_hour=0):
     ax.legend(
         handles1 + handles2,
         labels1 + labels2,
-        loc="upper left",
-        ncol=2,
-        fontsize=9
+        loc="center left",
+        bbox_to_anchor=(1.08, 0.5),
+        frameon=False,
+        fontsize=9,
     )
 
     fig.tight_layout()
